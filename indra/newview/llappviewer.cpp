@@ -1141,8 +1141,8 @@ bool LLAppViewer::init()
     // <FS:Beq> allow detected hardware to be overridden.
     gGLManager.mVRAMDetected = gGLManager.mVRAM;
     LL_INFOS("AppInit") << "VRAM detected: " << gGLManager.mVRAMDetected << LL_ENDL;
-    overrideDetectedHardware(); 
-    // </FS:Beq> 
+    overrideDetectedHardware();
+    // </FS:Beq>
 
 
     // writeSystemInfo can be called after window is initialized (gViewerWindow non-null)
@@ -3783,7 +3783,7 @@ bool LLAppViewer::initWindow()
 
     // <FS:Codex> Initialize Python bridge plugin
     FSPythonBridge::instance().init();
-    
+
     LL_INFOS("AppInit") << "Window initialization done." << LL_ENDL;
 
     return true;
@@ -3801,7 +3801,7 @@ bool LLAppViewer::waitForUpdater()
 
 void LLAppViewer::writeDebugInfo(bool isStatic)
 {
-    LL_PROFILE_ZONE_SCOPED_CATEGORY_LOGGING; // <FS:Beq/> improve instrumentation 
+    LL_PROFILE_ZONE_SCOPED_CATEGORY_LOGGING; // <FS:Beq/> improve instrumentation
 #if LL_WINDOWS && LL_BUGSPLAT
     // <FS:Beq> Improve Bugsplat tracking by using attributes for certain static data items.
     const LLSD& info = getViewerInfo();

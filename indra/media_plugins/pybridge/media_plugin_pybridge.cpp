@@ -36,6 +36,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string>
 #include <cstring>
 #include <sstream>
@@ -85,6 +86,7 @@ bool MediaPluginPyBridge::init()
     mServerFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (mServerFd >= 0)
     {
+        ::fcntl(mServerFd, F_SETFL, O_NONBLOCK);
         struct sockaddr_un addr {};
         addr.sun_family = AF_UNIX;
         std::strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
@@ -105,8 +107,8 @@ void MediaPluginPyBridge::send_json(const std::string &msg)
 {
     if (mClientFd >= 0)
     {
-        ::send(mClientFd, msg.c_str(), msg.size(), 0);
-        ::send(mClientFd, "\n", 1, 0);
+        ::send(mClientFd, msg.c_str(), msg.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+        ::send(mClientFd, "\n", 1, MSG_DONTWAIT | MSG_NOSIGNAL);
     }
 }
 
@@ -151,6 +153,10 @@ void MediaPluginPyBridge::idle(void *userdata)
     if (self->mClientFd < 0 && self->mServerFd >= 0)
     {
         self->mClientFd = ::accept(self->mServerFd, nullptr, nullptr);
+        if (self->mClientFd >= 0)
+        {
+            ::fcntl(self->mClientFd, F_SETFL, O_NONBLOCK);
+        }
     }
     if (self->mClientFd >= 0)
     {
