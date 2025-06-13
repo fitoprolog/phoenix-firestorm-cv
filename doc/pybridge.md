@@ -19,6 +19,9 @@ through the normal plugin framework.
 3. Frames are pushed from the viewer to Python.  Key and mouse events typed
    in the Python window are forwarded back to the viewer.
 
+The plugin writes each JSON packet followed by a newline and will accept a new
+connection if the client disconnects.
+
 Frames are transferred using the existing shared memory mechanism and are
 sent to Python base64 encoded.  The proof-of-concept script reconstructs
 the frames using NumPy and OpenCV.

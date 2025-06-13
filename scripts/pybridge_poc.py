@@ -33,8 +33,12 @@ import cv2
 
 SOCKET_PATH = '/tmp/firestorm_pybridge.sock'
 
-sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-sock.connect(SOCKET_PATH)
+def connect_socket():
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(SOCKET_PATH)
+    return s
+
+sock = connect_socket()
 
 def on_mouse(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE:
@@ -54,7 +58,10 @@ try:
         while not data.endswith(b'\n'):
             chunk = sock.recv(4096)
             if not chunk:
-                raise SystemExit
+                sock.close()
+                sock = connect_socket()
+                data = b''
+                continue
             data += chunk
         msg = json.loads(data.decode('utf-8'))
         if msg['type'] == 'frame':

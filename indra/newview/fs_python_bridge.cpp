@@ -31,6 +31,7 @@
 #include "llgl.h"
 #include "llimage.h"
 #include "llbase64.h"
+#include <cstring>
 
 FSPythonBridge::FSPythonBridge() : mPlugin(nullptr) {}
 

@@ -53,12 +53,13 @@ public:
 
 private:
     bool init();
-    void send_json(const std::string &msg);
+    void enqueue_json(const std::string &msg);
     void handle_line(const std::string &line);
 
     int mServerFd;
     int mClientFd;
     std::string mInputBuf;
+    std::string mOutputBuf;
 };
 
 MediaPluginPyBridge::MediaPluginPyBridge(LLPluginInstance::sendMessageFunction host_send_func,
@@ -103,13 +104,9 @@ bool MediaPluginPyBridge::init()
     return true;
 }
 
-void MediaPluginPyBridge::send_json(const std::string &msg)
+void MediaPluginPyBridge::enqueue_json(const std::string &msg)
 {
-    if (mClientFd >= 0)
-    {
-        std::string data = msg + "\n";
-        ::send(mClientFd, data.c_str(), data.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
-    }
+    mOutputBuf += msg + "\n";
 }
 
 void MediaPluginPyBridge::handle_line(const std::string &line)
@@ -160,11 +157,42 @@ void MediaPluginPyBridge::idle(void *userdata)
     }
     if (self->mClientFd >= 0)
     {
+        /* Send any queued output */
+        while (!self->mOutputBuf.empty())
+        {
+            ssize_t sent = ::send(self->mClientFd, self->mOutputBuf.c_str(), self->mOutputBuf.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+            if (sent > 0)
+            {
+                self->mOutputBuf.erase(0, sent);
+            }
+            else if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            {
+                break;
+            }
+            else
+            {
+                ::close(self->mClientFd);
+                self->mClientFd = -1;
+                self->mInputBuf.clear();
+                self->mOutputBuf.clear();
+                return;
+            }
+        }
+
+        /* Read incoming data */
         char buf[256];
         ssize_t len;
         while ((len = ::recv(self->mClientFd, buf, sizeof(buf), MSG_DONTWAIT)) > 0)
         {
             self->mInputBuf.append(buf, len);
+        }
+        if (len == 0)
+        {
+            ::close(self->mClientFd);
+            self->mClientFd = -1;
+            self->mInputBuf.clear();
+            self->mOutputBuf.clear();
+            return;
         }
         size_t pos;
         while ((pos = self->mInputBuf.find('\n')) != std::string::npos)
@@ -239,7 +267,7 @@ void MediaPluginPyBridge::receiveMessage(const char *message_string)
                 std::string encoded = LLBase64::encode(data, width * height * 3);
                 std::string json = "{\"type\":\"frame\",\"width\":" + std::to_string(width) +
                                    ",\"height\":" + std::to_string(height) + ",\"data\":\"" + encoded + "\"}";
-                send_json(json);
+                enqueue_json(json);
             }
         }
         else if (message_name == "packet_in" || message_name == "packet_out")
@@ -248,13 +276,13 @@ void MediaPluginPyBridge::receiveMessage(const char *message_string)
             std::string dir = (message_name == "packet_in") ? "in" : "out";
             std::string json = "{\"type\":\"packet\",\"dir\":\"" + dir + "\",\"data\":\"" +
                                LLBase64::encode((const U8 *)data.data(), data.size()) + "\"}";
-            send_json(json);
+            enqueue_json(json);
         }
         else if (message_name == "mouse" || message_name == "keyboard")
         {
             std::string json = "{\"type\":\"" + message_name + "\",\"data\":\"" +
                                message_in.getValue("data") + "\"}";
-            send_json(json);
+            enqueue_json(json);
         }
     }
 }
