@@ -107,8 +107,8 @@ void MediaPluginPyBridge::send_json(const std::string &msg)
 {
     if (mClientFd >= 0)
     {
-        ::send(mClientFd, msg.c_str(), msg.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
-        ::send(mClientFd, "\n", 1, MSG_DONTWAIT | MSG_NOSIGNAL);
+        std::string data = msg + "\n";
+        ::send(mClientFd, data.c_str(), data.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
     }
 }
 

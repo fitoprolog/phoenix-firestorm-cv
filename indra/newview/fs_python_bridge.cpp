@@ -54,17 +54,17 @@ void FSPythonBridge::Plugin::receivePluginMessage(const LLPluginMessage &message
 
 std::string FSPythonBridge::Plugin::allocSharedMemory(size_t size)
 {
-    return mPlugin->addSharedMemory(size);
+    return addSharedMemory(size);
 }
 
 void FSPythonBridge::Plugin::freeSharedMemory(const std::string &name)
 {
-    mPlugin->removeSharedMemory(name);
+    removeSharedMemory(name);
 }
 
 void FSPythonBridge::Plugin::writeSharedMemory(const std::string &name, const void *data, size_t size)
 {
-    void *addr = mPlugin->getSharedMemoryAddress(name);
+    void *addr = getSharedMemoryAddress(name);
     if(addr)
         memcpy(addr, data, size);
 }
