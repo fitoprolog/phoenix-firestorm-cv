@@ -8,23 +8,35 @@
 
 #include "llplugincookiestore.h"
 #include "llviewerwindow.h"
+#include "llpluginclassmedia.h"
+#include <SDL2/SDL.h>
 
 class LLPluginClassMedia;
 
-class FSPythonBridge
+class FSPythonBridge : public LLPluginClassMediaOwner
 {
 public:
     static FSPythonBridge &instance();
 
     void init();
+    void idle();
     void sendFrame(LLPointer<LLImageRaw> raw);
     void sendPacket(const std::string &data, bool outgoing);
-    void sendMouseEvent(const std::string &desc);
-    void sendKeyEvent(const std::string &desc);
+    void handleBridgeMessage(const LLPluginMessage &msg);
+    void handleMediaEvent(LLPluginClassMedia* self, EMediaEvent event) override {}
 
 private:
     FSPythonBridge();
-    LLPluginClassMedia *mPlugin;
+    class Plugin : public LLPluginClassMedia
+    {
+    public:
+        Plugin(FSPythonBridge *owner) : LLPluginClassMedia(owner), mOwner(owner) {}
+        void receivePluginMessage(const LLPluginMessage &message) override;
+    private:
+        FSPythonBridge *mOwner;
+    };
+
+    Plugin *mPlugin;
 };
 
 #endif // FS_PYTHON_BRIDGE_H

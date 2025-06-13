@@ -16,8 +16,8 @@ through the normal plugin framework.
 1. Launch the viewer so that the `pybridge` plugin is loaded.
 2. Run `scripts/pybridge_poc.py` which connects to the socket at
    `/tmp/firestorm_pybridge.sock`.
-3. Whenever the viewer forwards a frame or input event to the plugin the
-   script will display or print the information.
+3. Frames are pushed from the viewer to Python.  Key and mouse events typed
+   in the Python window are forwarded back to the viewer.
 
 Frames are transferred using the existing shared memory mechanism and are
 sent to Python base64 encoded.  The proof-of-concept script reconstructs

@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <string>
 #include <cstring>
+#include <sstream>
 
 class MediaPluginPyBridge : public MediaPluginBase
 {
@@ -52,9 +53,11 @@ public:
 private:
     bool init();
     void send_json(const std::string &msg);
+    void handle_line(const std::string &line);
 
     int mServerFd;
     int mClientFd;
+    std::string mInputBuf;
 };
 
 MediaPluginPyBridge::MediaPluginPyBridge(LLPluginInstance::sendMessageFunction host_send_func,
@@ -107,12 +110,63 @@ void MediaPluginPyBridge::send_json(const std::string &msg)
     }
 }
 
+void MediaPluginPyBridge::handle_line(const std::string &line)
+{
+    std::istringstream iss(line);
+    std::string type;
+    if (!(iss >> type))
+        return;
+    if (type == "mouse")
+    {
+        std::string state;
+        int x = 0, y = 0, button = 0;
+        if (iss >> state >> x >> y >> button)
+        {
+            LLPluginMessage msg("bridge", "mouse");
+            msg.setValue("state", state);
+            msg.setValueS32("x", x);
+            msg.setValueS32("y", y);
+            msg.setValueS32("button", button);
+            sendMessage(msg);
+        }
+    }
+    else if (type == "key")
+    {
+        std::string state;
+        int key = 0, mod = 0;
+        if (iss >> state >> key >> mod)
+        {
+            LLPluginMessage msg("bridge", "keyboard");
+            msg.setValue("state", state);
+            msg.setValueS32("key", key);
+            msg.setValueS32("mod", mod);
+            sendMessage(msg);
+        }
+    }
+}
+
 void MediaPluginPyBridge::idle(void *userdata)
 {
     auto *self = (MediaPluginPyBridge *)userdata;
     if (self->mClientFd < 0 && self->mServerFd >= 0)
     {
         self->mClientFd = ::accept(self->mServerFd, nullptr, nullptr);
+    }
+    if (self->mClientFd >= 0)
+    {
+        char buf[256];
+        ssize_t len;
+        while ((len = ::recv(self->mClientFd, buf, sizeof(buf), MSG_DONTWAIT)) > 0)
+        {
+            self->mInputBuf.append(buf, len);
+        }
+        size_t pos;
+        while ((pos = self->mInputBuf.find('\n')) != std::string::npos)
+        {
+            std::string line = self->mInputBuf.substr(0, pos);
+            self->mInputBuf.erase(0, pos + 1);
+            self->handle_line(line);
+        }
     }
 }
 

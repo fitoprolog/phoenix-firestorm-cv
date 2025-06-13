@@ -10,6 +10,18 @@ SOCKET_PATH = '/tmp/firestorm_pybridge.sock'
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.connect(SOCKET_PATH)
 
+def on_mouse(event, x, y, flags, param):
+    if event == cv2.EVENT_MOUSEMOVE:
+        sock.sendall(f"mouse move {x} {y} 0\n".encode())
+    elif event == cv2.EVENT_LBUTTONDOWN:
+        sock.sendall(f"mouse down {x} {y} 1\n".encode())
+    elif event == cv2.EVENT_LBUTTONUP:
+        sock.sendall(f"mouse up {x} {y} 1\n".encode())
+
+
+cv2.namedWindow('frame')
+cv2.setMouseCallback('frame', on_mouse)
+
 try:
     while True:
         data = b''
@@ -25,8 +37,12 @@ try:
             frame = np.frombuffer(base64.b64decode(msg['data']), dtype=np.uint8)
             frame = frame.reshape((height, width, 3))
             cv2.imshow('frame', frame)
-            if cv2.waitKey(1) == 27:
+            k = cv2.waitKey(1)
+            if k == 27:
                 break
+            if k != -1:
+                sock.sendall(f"key down {k} 0\n".encode())
+                sock.sendall(f"key up {k} 0\n".encode())
         else:
             print(msg)
 finally:
