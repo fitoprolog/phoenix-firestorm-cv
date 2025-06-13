@@ -28,6 +28,8 @@
 #include "llpluginmessage.h"
 #include "llviewerwindow.h"
 #include "lldir.h"
+#include "llgl.h"
+#include "llimage.h"
 #include "llbase64.h"
 
 FSPythonBridge::FSPythonBridge() : mPlugin(nullptr) {}
@@ -83,6 +85,21 @@ void FSPythonBridge::idle()
 {
     if (mPlugin)
         mPlugin->idle();
+}
+
+void FSPythonBridge::captureFrame()
+{
+    if (!gViewerWindow)
+        return;
+
+    S32 width = gViewerWindow->getWindowWidthRaw();
+    S32 height = gViewerWindow->getWindowHeightRaw();
+    LLPointer<LLImageRaw> raw = new LLImageRaw(width, height, 3);
+    LLImageDataSharedLock lock(raw);
+    glPixelStorei(GL_PACK_ALIGNMENT,1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, raw->getData());
+    sendFrame(raw);
 }
 
 void FSPythonBridge::sendFrame(LLPointer<LLImageRaw> raw)

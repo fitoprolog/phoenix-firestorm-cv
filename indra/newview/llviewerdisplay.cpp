@@ -85,6 +85,7 @@
 #include "llvoavatarself.h"
 #include "llvograss.h"
 #include "llworld.h"
+#include "fs_python_bridge.h"
 #include "pipeline.h"
 
 #include <boost/json.hpp>
@@ -1154,6 +1155,7 @@ void display(bool rebuild, F32 zoom_factor, int subfield, bool for_snapshot)
         if (!for_snapshot)
         {
             render_ui();
+            FSPythonBridge::instance().captureFrame();
             swap();
         }
 

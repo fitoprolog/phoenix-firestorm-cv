@@ -40,6 +40,7 @@ public:
 
     void init();
     void idle();
+    void captureFrame();
     void sendFrame(LLPointer<LLImageRaw> raw);
     void sendPacket(const std::string &data, bool outgoing);
     void handleBridgeMessage(const LLPluginMessage &msg);
