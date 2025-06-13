@@ -294,6 +294,7 @@ using namespace LL;
 
 #include "fsradar.h"
 #include "fsassetblacklist.h"
+#include "fs_python_bridge.h"
 #include "bugsplatattributes.h"
 // #include "fstelemetry.h" // <FS:Beq> Tracy profiler support
 
@@ -3780,6 +3781,9 @@ bool LLAppViewer::initWindow()
     // show viewer window
     //gViewerWindow->getWindow()->show();
 
+    // <FS:Codex> Initialize Python bridge plugin
+    FSPythonBridge::instance().init();
+    
     LL_INFOS("AppInit") << "Window initialization done." << LL_ENDL;
 
     return true;
@@ -5602,6 +5606,9 @@ void LLAppViewer::idle()
     static std::chrono::nanoseconds MainWorkTimeNanoSec{
         std::chrono::nanoseconds::rep(MainWorkTimeMs.value() * 1000000)};
     gMainloopWork.runFor(MainWorkTimeNanoSec);
+
+    // <FS:Codex> Update Python bridge plugin
+    FSPythonBridge::instance().idle();
 
     // Cap out-of-control frame times
     // Too low because in menus, swapping, debugger, etc.
