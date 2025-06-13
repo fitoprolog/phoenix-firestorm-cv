@@ -17,7 +17,9 @@ through the normal plugin framework.
 2. Run `scripts/pybridge_poc.py` which connects to the socket at
    `/tmp/firestorm_pybridge.sock`.
 3. Frames are pushed from the viewer to Python.  Key and mouse events typed
-   in the Python window are forwarded back to the viewer.
+   in the Python window are forwarded back to the viewer.  The script
+   accumulates incoming data and splits messages on newline characters so
+   partial socket reads are handled correctly.
 
 The plugin writes each JSON packet followed by a newline and will accept a new
 connection if the client disconnects.

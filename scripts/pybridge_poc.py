@@ -39,6 +39,7 @@ def connect_socket():
     return s
 
 sock = connect_socket()
+buf = b""
 
 def on_mouse(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE:
@@ -54,19 +55,21 @@ cv2.setMouseCallback('frame', on_mouse)
 
 try:
     while True:
-        data = b''
-        while not data.endswith(b'\n'):
-            chunk = sock.recv(4096)
-            if not chunk:
-                sock.close()
-                sock = connect_socket()
-                data = b''
+        chunk = sock.recv(4096)
+        if not chunk:
+            sock.close()
+            sock = connect_socket()
+            buf = b""
+            continue
+        buf += chunk
+        while b'\n' in buf:
+            line, buf = buf.split(b'\n', 1)
+            if not line:
                 continue
-            data += chunk
-        msg = json.loads(data.decode('utf-8'))
-        if msg['type'] == 'frame':
-            width = msg['width']
-            height = msg['height']
+            msg = json.loads(line.decode('utf-8'))
+            if msg['type'] == 'frame':
+                width = msg['width']
+                height = msg['height']
             frame = np.frombuffer(base64.b64decode(msg['data']), dtype=np.uint8)
             frame = frame.reshape((height, width, 3))
             cv2.imshow('frame', frame)
