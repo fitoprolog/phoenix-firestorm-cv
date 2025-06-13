@@ -32,6 +32,11 @@ private:
     public:
         Plugin(FSPythonBridge *owner) : LLPluginClassMedia(owner), mOwner(owner) {}
         void receivePluginMessage(const LLPluginMessage &message) override;
+
+        std::string allocSharedMemory(size_t size);
+        void freeSharedMemory(const std::string &name);
+        void writeSharedMemory(const std::string &name, const void *data, size_t size);
+        void sendMessagePublic(const LLPluginMessage &message) { sendMessage(message); }
     private:
         FSPythonBridge *mOwner;
     };

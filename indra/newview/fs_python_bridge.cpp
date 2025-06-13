@@ -3,6 +3,7 @@
 #include "llpluginmessage.h"
 #include "llviewerwindow.h"
 #include "lldir.h"
+#include "llbase64.h"
 
 FSPythonBridge::FSPythonBridge() : mPlugin(nullptr) {}
 
@@ -22,6 +23,23 @@ void FSPythonBridge::Plugin::receivePluginMessage(const LLPluginMessage &message
     {
         LLPluginClassMedia::receivePluginMessage(message);
     }
+}
+
+std::string FSPythonBridge::Plugin::allocSharedMemory(size_t size)
+{
+    return mPlugin->addSharedMemory(size);
+}
+
+void FSPythonBridge::Plugin::freeSharedMemory(const std::string &name)
+{
+    mPlugin->removeSharedMemory(name);
+}
+
+void FSPythonBridge::Plugin::writeSharedMemory(const std::string &name, const void *data, size_t size)
+{
+    void *addr = mPlugin->getSharedMemoryAddress(name);
+    if(addr)
+        memcpy(addr, data, size);
 }
 
 void FSPythonBridge::init()
@@ -47,12 +65,12 @@ void FSPythonBridge::sendFrame(LLPointer<LLImageRaw> raw)
     if (!mPlugin)
         return;
     LLPluginMessage msg("bridge", "frame");
-    std::string name = mPlugin->addSharedMemory(raw->getDataSize());
-    mPlugin->sendSharedMemory(name, raw->getData(), raw->getDataSize());
+    std::string name = mPlugin->allocSharedMemory(raw->getDataSize());
+    mPlugin->writeSharedMemory(name, raw->getData(), raw->getDataSize());
     msg.setValue("name", name);
     msg.setValueS32("width", raw->getWidth());
     msg.setValueS32("height", raw->getHeight());
-    mPlugin->sendMessage(msg);
+    mPlugin->sendMessagePublic(msg);
 }
 
 void FSPythonBridge::sendPacket(const std::string &data, bool outgoing)
@@ -60,8 +78,9 @@ void FSPythonBridge::sendPacket(const std::string &data, bool outgoing)
     if (!mPlugin)
         return;
     LLPluginMessage msg("bridge", outgoing ? "packet_out" : "packet_in");
-    msg.setValueBinaryData("data", data.data(), data.size());
-    mPlugin->sendMessage(msg);
+    std::string encoded = LLBase64::encode((const U8*)data.data(), data.size());
+    msg.setValue("data", encoded);
+    mPlugin->sendMessagePublic(msg);
 }
 
 void FSPythonBridge::handleBridgeMessage(const LLPluginMessage &msg)
