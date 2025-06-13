@@ -30,8 +30,10 @@ import json
 import base64
 import numpy as np
 import cv2
+import os
+import sys
 
-SOCKET_PATH = '/tmp/firestorm_pybridge.sock'
+SOCKET_PATH = sys.argv[1] if len(sys.argv) > 1 else os.getenv("PYBRIDGE_SOCKET", "/tmp/firestorm_pybridge.sock")
 
 def connect_socket():
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -70,16 +72,16 @@ try:
             if msg['type'] == 'frame':
                 width = msg['width']
                 height = msg['height']
-            frame = np.frombuffer(base64.b64decode(msg['data']), dtype=np.uint8)
-            frame = frame.reshape((height, width, 3))
-            cv2.imshow('frame', frame)
-            k = cv2.waitKey(1)
-            if k == 27:
-                break
-            if k != -1:
-                sock.sendall(f"key down {k} 0\n".encode())
-                sock.sendall(f"key up {k} 0\n".encode())
-        else:
-            print(msg)
+                frame = np.frombuffer(base64.b64decode(msg['data']), dtype=np.uint8)
+                frame = frame.reshape((height, width, 3))
+                cv2.imshow('frame', frame)
+                k = cv2.waitKey(1)
+                if k == 27:
+                    break
+                if k != -1:
+                    sock.sendall(f"key down {k} 0\n".encode())
+                    sock.sendall(f"key up {k} 0\n".encode())
+            else:
+                print(msg)
 finally:
     sock.close()

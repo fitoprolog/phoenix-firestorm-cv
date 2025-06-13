@@ -36,6 +36,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <string>
 #include <cstring>
@@ -60,11 +62,12 @@ private:
     int mClientFd;
     std::string mInputBuf;
     std::string mOutputBuf;
+    pid_t mChildPid;
 };
 
 MediaPluginPyBridge::MediaPluginPyBridge(LLPluginInstance::sendMessageFunction host_send_func,
                                          void *host_user_data)
-    : MediaPluginBase(host_send_func, host_user_data), mServerFd(-1), mClientFd(-1)
+    : MediaPluginBase(host_send_func, host_user_data), mServerFd(-1), mClientFd(-1), mChildPid(-1)
 {
 }
 
@@ -75,6 +78,10 @@ MediaPluginPyBridge::~MediaPluginPyBridge()
     if (mServerFd >= 0)
     {
         ::close(mServerFd);
+    }
+    if (mChildPid > 0)
+    {
+        ::kill(mChildPid, SIGTERM);
     }
 }
 
@@ -101,6 +108,23 @@ bool MediaPluginPyBridge::init()
     LLPluginMessage msg(LLPLUGIN_MESSAGE_CLASS_MEDIA, "name_text");
     msg.setValue("name", "Python Bridge Plugin");
     sendMessage(msg);
+
+    const char *script = ::getenv("PYBRIDGE_SCRIPT");
+    if (script)
+    {
+        const char *venv = ::getenv("PYBRIDGE_VENV");
+        std::string python = venv ? std::string(venv) + "/bin/python" : "python3";
+        pid_t pid = ::fork();
+        if (pid == 0)
+        {
+            ::execlp(python.c_str(), python.c_str(), script, path, (char *)NULL);
+            ::_exit(1);
+        }
+        else if (pid > 0)
+        {
+            mChildPid = pid;
+        }
+    }
     return true;
 }
 

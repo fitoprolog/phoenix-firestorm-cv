@@ -14,9 +14,14 @@ through the normal plugin framework.
 ## Usage
 
 1. Launch the viewer so that the `pybridge` plugin is loaded.
-2. Run `scripts/pybridge_poc.py` which connects to the socket at
-   `/tmp/firestorm_pybridge.sock`.
-3. Frames are pushed from the viewer to Python.  Key and mouse events typed
+2. Optionally set `PYBRIDGE_SCRIPT` to the path of a Python script. When the
+   plugin initializes it will launch this script automatically. If the
+   environment variable `PYBRIDGE_VENV` points to a virtualenv directory, the
+   interpreter `${PYBRIDGE_VENV}/bin/python` will be used instead of the system
+   `python3`.
+3. Run `scripts/pybridge_poc.py` manually or rely on `PYBRIDGE_SCRIPT`.  The
+   script connects to the socket at `/tmp/firestorm_pybridge.sock`.
+4. Frames are pushed from the viewer to Python.  Key and mouse events typed
    in the Python window are forwarded back to the viewer.  The script
    accumulates incoming data and splits messages on newline characters so
    partial socket reads are handled correctly.
