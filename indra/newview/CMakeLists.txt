@@ -176,6 +176,7 @@ set(viewer_SOURCE_FILES
     fsslurlcommand.cpp
     fsvirtualtrackpad.cpp
     fsworldmapmessage.cpp
+    fs_python_bridge.cpp
     lggbeamcolormapfloater.cpp
     lggbeammapfloater.cpp
     lggbeammaps.cpp
@@ -1010,6 +1011,7 @@ set(viewer_HEADER_FILES
     fsslurlcommand.h
     fsvirtualtrackpad.h
     fsworldmapmessage.h
+    fs_python_bridge.h
     lggbeamcolormapfloater.h
     lggbeammapfloater.h
     lggbeammaps.h
