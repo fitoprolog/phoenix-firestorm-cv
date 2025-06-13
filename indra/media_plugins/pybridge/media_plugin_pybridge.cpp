@@ -253,7 +253,7 @@ void MediaPluginPyBridge::receiveMessage(const char *message_string)
     }
 }
 
-extern "C" int init_media_plugin(LLPluginInstance::sendMessageFunction host_send_func,
+int init_media_plugin(LLPluginInstance::sendMessageFunction host_send_func,
                                  void *host_user_data,
                                  LLPluginInstance::sendMessageFunction *plugin_send_func,
                                  void **plugin_user_data)
