@@ -21,7 +21,7 @@ set(media_plugin_pybridge_SOURCE_FILES
 
 add_library(media_plugin_pybridge SHARED ${media_plugin_pybridge_SOURCE_FILES})
 
-target_link_libraries(media_plugin_pybridge media_plugin_base)
+target_link_libraries(media_plugin_pybridge media_plugin_base llwebrtc curl)
 
 if(DARWIN)
   set_target_properties(

@@ -32,18 +32,22 @@
 #include "llpluginmessageclasses.h"
 #include "media_plugin_base.h"
 #include "llbase64.h"
+#include "llsd.h"
+#include "llsdserialize.h"
 
-#include <sys/socket.h>
-#include <sys/un.h>
+#include "llwebrtc.h"
+#include <curl/curl.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <string>
 #include <cstring>
 #include <sstream>
 
-class MediaPluginPyBridge : public MediaPluginBase
+class MediaPluginPyBridge : public MediaPluginBase,
+                            public llwebrtc::LLWebRTCSignalingObserver,
+                            public llwebrtc::LLWebRTCDataObserver,
+                            public llwebrtc::LLWebRTCLogCallback
 {
 public:
     MediaPluginPyBridge(LLPluginInstance::sendMessageFunction host_send_func,
@@ -53,13 +57,24 @@ public:
     void receiveMessage(const char *message_string) override;
     static void idle(void *userdata);
 
+    // llwebrtc callbacks
+    void OnIceGatheringState(EIceGatheringState state) override {}
+    void OnIceCandidate(const llwebrtc::LLWebRTCIceCandidate& candidate) override {}
+    void OnOfferAvailable(const std::string& sdp) override;
+    void OnRenegotiationNeeded() override {}
+    void OnPeerConnectionClosed() override {}
+    void OnAudioEstablished(llwebrtc::LLWebRTCAudioInterface* ai) override {}
+    void OnDataChannelReady(llwebrtc::LLWebRTCDataInterface *data_interface) override;
+    void OnDataReceived(const std::string& data, bool binary) override;
+    void LogMessage(llwebrtc::LLWebRTCLogCallback::LogLevel level, const std::string& message) override {}
+
 private:
     bool init();
     void enqueue_json(const std::string &msg);
     void handle_line(const std::string &line);
 
-    int mServerFd;
-    int mClientFd;
+    llwebrtc::LLWebRTCPeerConnectionInterface *mPeer;
+    llwebrtc::LLWebRTCDataInterface *mData;
     std::string mInputBuf;
     std::string mOutputBuf;
     pid_t mChildPid;
@@ -67,18 +82,18 @@ private:
 
 MediaPluginPyBridge::MediaPluginPyBridge(LLPluginInstance::sendMessageFunction host_send_func,
                                          void *host_user_data)
-    : MediaPluginBase(host_send_func, host_user_data), mServerFd(-1), mClientFd(-1), mChildPid(-1)
+    : MediaPluginBase(host_send_func, host_user_data), mPeer(nullptr), mData(nullptr), mChildPid(-1)
 {
 }
 
 MediaPluginPyBridge::~MediaPluginPyBridge()
 {
-    if (mClientFd >= 0)
-        ::close(mClientFd);
-    if (mServerFd >= 0)
+    if (mPeer)
     {
-        ::close(mServerFd);
+        mPeer->shutdownConnection();
+        llwebrtc::freePeerConnection(mPeer);
     }
+    llwebrtc::terminate();
     if (mChildPid > 0)
     {
         ::kill(mChildPid, SIGTERM);
@@ -87,23 +102,11 @@ MediaPluginPyBridge::~MediaPluginPyBridge()
 
 bool MediaPluginPyBridge::init()
 {
-    const char *path = ::getenv("PYBRIDGE_SOCKET");
-    if (!path)
-        path = "/tmp/firestorm_pybridge.sock";
-
-    mServerFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-    if (mServerFd >= 0)
-    {
-        ::fcntl(mServerFd, F_SETFL, O_NONBLOCK);
-        struct sockaddr_un addr {};
-        addr.sun_family = AF_UNIX;
-        std::strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-        ::unlink(path);
-        if (::bind(mServerFd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
-        {
-            ::listen(mServerFd, 1);
-        }
-    }
+    llwebrtc::init(this);
+    mPeer = llwebrtc::newPeerConnection();
+    mPeer->setSignalingObserver(this);
+    llwebrtc::LLWebRTCPeerConnectionInterface::InitOptions opts;
+    mPeer->initializeConnection(opts);
 
     LLPluginMessage msg(LLPLUGIN_MESSAGE_CLASS_MEDIA, "name_text");
     msg.setValue("name", "Python Bridge Plugin");
@@ -117,7 +120,7 @@ bool MediaPluginPyBridge::init()
         pid_t pid = ::fork();
         if (pid == 0)
         {
-            ::execlp(python.c_str(), python.c_str(), script, path, (char *)NULL);
+            ::execlp(python.c_str(), python.c_str(), script, (char *)NULL);
             ::_exit(1);
         }
         else if (pid > 0)
@@ -171,61 +174,59 @@ void MediaPluginPyBridge::handle_line(const std::string &line)
 void MediaPluginPyBridge::idle(void *userdata)
 {
     auto *self = (MediaPluginPyBridge *)userdata;
-    if (self->mClientFd < 0 && self->mServerFd >= 0)
+    if (self->mData)
     {
-        self->mClientFd = ::accept(self->mServerFd, nullptr, nullptr);
-        if (self->mClientFd >= 0)
-        {
-            ::fcntl(self->mClientFd, F_SETFL, O_NONBLOCK);
-        }
-    }
-    if (self->mClientFd >= 0)
-    {
-        /* Send any queued output */
         while (!self->mOutputBuf.empty())
         {
-            ssize_t sent = ::send(self->mClientFd, self->mOutputBuf.c_str(), self->mOutputBuf.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
-            if (sent > 0)
-            {
-                self->mOutputBuf.erase(0, sent);
-            }
-            else if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            {
+            size_t newline = self->mOutputBuf.find('\n');
+            if (newline == std::string::npos)
                 break;
-            }
-            else
-            {
-                ::close(self->mClientFd);
-                self->mClientFd = -1;
-                self->mInputBuf.clear();
-                self->mOutputBuf.clear();
-                return;
-            }
-        }
-
-        /* Read incoming data */
-        char buf[256];
-        ssize_t len;
-        while ((len = ::recv(self->mClientFd, buf, sizeof(buf), MSG_DONTWAIT)) > 0)
-        {
-            self->mInputBuf.append(buf, len);
-        }
-        if (len == 0)
-        {
-            ::close(self->mClientFd);
-            self->mClientFd = -1;
-            self->mInputBuf.clear();
-            self->mOutputBuf.clear();
-            return;
-        }
-        size_t pos;
-        while ((pos = self->mInputBuf.find('\n')) != std::string::npos)
-        {
-            std::string line = self->mInputBuf.substr(0, pos);
-            self->mInputBuf.erase(0, pos + 1);
-            self->handle_line(line);
+            std::string line = self->mOutputBuf.substr(0, newline);
+            self->mOutputBuf.erase(0, newline + 1);
+            self->mData->sendData(line, false);
         }
     }
+}
+
+void MediaPluginPyBridge::OnOfferAvailable(const std::string &sdp)
+{
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return;
+    curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:8080/offer");
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    std::string post = "{\"sdp\":\"" + sdp + "\"}";
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, post.size());
+    std::string response;
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, +[](char *ptr,size_t size,size_t nmemb,void *userdata)->size_t{
+        std::string *res = (std::string*)userdata;
+        res->append(ptr, size*nmemb);
+        return size*nmemb;
+    });
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+    LLSD data;
+    LLSDSerialize::fromJSON(data, response);
+    if (data.has("sdp"))
+    {
+        mPeer->AnswerAvailable(data["sdp"].asString());
+    }
+}
+
+void MediaPluginPyBridge::OnDataChannelReady(llwebrtc::LLWebRTCDataInterface *data_interface)
+{
+    mData = data_interface;
+    if (mData)
+        mData->setDataObserver(this);
+}
+
+void MediaPluginPyBridge::OnDataReceived(const std::string &data, bool binary)
+{
+    if (binary)
+        return;
+    handle_line(data);
 }
 
 void MediaPluginPyBridge::receiveMessage(const char *message_string)

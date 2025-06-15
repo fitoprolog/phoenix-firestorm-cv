@@ -1,87 +1,84 @@
 #!/usr/bin/env python3
 """
-@file pybridge_poc.py
-@brief Proof of concept client for the Python bridge
-
-$LicenseInfo:firstyear=2024&license=viewerlgpl$
-Second Life Viewer Source Code
-Copyright (C) 2010, Linden Research, Inc.
-
-This library is free software; you can redistribute it and/or
-modify it under the terms of the GNU Lesser General Public
-License as published by the Free Software Foundation;
-version 2.1 of the License only.
-
-This library is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-Lesser General Public License for more details.
-
-You should have received a copy of the GNU Lesser General Public
-License along with this library; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
-$/LicenseInfo$
+Proof-of-concept Python client for the pybridge plugin using WebRTC
+signaling over HTTP.
 """
 
-import socket
-import json
+import asyncio
 import base64
-import numpy as np
+import json
+from aiohttp import web
+from aiortc import RTCPeerConnection, RTCSessionDescription
 import cv2
-import os
-import sys
+import numpy as np
 
-SOCKET_PATH = sys.argv[1] if len(sys.argv) > 1 else os.getenv("PYBRIDGE_SOCKET", "/tmp/firestorm_pybridge.sock")
+pc = RTCPeerConnection()
+channel = None
 
-def connect_socket():
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(SOCKET_PATH)
-    return s
+async def index(request):
+    return web.Response(text="pybridge signaling")
 
-sock = connect_socket()
-buf = b""
+async def offer(request):
+    params = await request.json()
+    offer = RTCSessionDescription(sdp=params["sdp"], type="offer")
+    await pc.setRemoteDescription(offer)
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+    return web.json_response({"sdp": pc.localDescription.sdp})
+
+@pc.on("datachannel")
+def on_datachannel(dc):
+    global channel
+    channel = dc
+    dc.on("message", on_message)
+
+buf = ""
 
 def on_mouse(event, x, y, flags, param):
+    if channel is None:
+        return
     if event == cv2.EVENT_MOUSEMOVE:
-        sock.sendall(f"mouse move {x} {y} 0\n".encode())
+        channel.send(f"mouse move {x} {y} 0")
     elif event == cv2.EVENT_LBUTTONDOWN:
-        sock.sendall(f"mouse down {x} {y} 1\n".encode())
+        channel.send(f"mouse down {x} {y} 1")
     elif event == cv2.EVENT_LBUTTONUP:
-        sock.sendall(f"mouse up {x} {y} 1\n".encode())
+        channel.send(f"mouse up {x} {y} 1")
 
 
-cv2.namedWindow('frame')
-cv2.setMouseCallback('frame', on_mouse)
-
-try:
-    while True:
-        chunk = sock.recv(4096)
-        if not chunk:
-            sock.close()
-            sock = connect_socket()
-            buf = b""
+def on_message(message):
+    global buf
+    if isinstance(message, bytes):
+        return
+    buf += message
+    while "\n" in buf:
+        line, buf = buf.split("\n", 1)
+        if not line:
             continue
-        buf += chunk
-        while b'\n' in buf:
-            line, buf = buf.split(b'\n', 1)
-            if not line:
-                continue
-            msg = json.loads(line.decode('utf-8'))
-            if msg['type'] == 'frame':
-                width = msg['width']
-                height = msg['height']
-                frame = np.frombuffer(base64.b64decode(msg['data']), dtype=np.uint8)
-                frame = frame.reshape((height, width, 3))
-                cv2.imshow('frame', frame)
-                k = cv2.waitKey(1)
-                if k == 27:
-                    break
-                if k != -1:
-                    sock.sendall(f"key down {k} 0\n".encode())
-                    sock.sendall(f"key up {k} 0\n".encode())
-            else:
-                print(msg)
-finally:
-    sock.close()
+        msg = json.loads(line)
+        if msg["type"] == "frame":
+            frame = np.frombuffer(base64.b64decode(msg["data"]), dtype=np.uint8)
+            frame = frame.reshape((msg["height"], msg["width"], 3))
+            cv2.imshow("frame", frame)
+            k = cv2.waitKey(1)
+            if k == 27:
+                exit(0)
+            if k != -1 and channel:
+                channel.send(f"key down {k} 0")
+                channel.send(f"key up {k} 0")
+        else:
+            print(msg)
+
+async def main():
+    app = web.Application()
+    app.add_routes([web.get('/', index), web.post('/offer', offer)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 8080)
+    await site.start()
+    cv2.namedWindow('frame')
+    cv2.setMouseCallback('frame', on_mouse)
+    while True:
+        await asyncio.sleep(1)
+
+if __name__ == '__main__':
+    asyncio.run(main())
