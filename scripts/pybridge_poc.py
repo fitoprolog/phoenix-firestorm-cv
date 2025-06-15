@@ -9,8 +9,6 @@ import base64
 import json
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
-import cv2
-import numpy as np
 
 pc = RTCPeerConnection()
 channel = None
@@ -34,17 +32,6 @@ def on_datachannel(dc):
 
 buf = ""
 
-def on_mouse(event, x, y, flags, param):
-    if channel is None:
-        return
-    if event == cv2.EVENT_MOUSEMOVE:
-        channel.send(f"mouse move {x} {y} 0")
-    elif event == cv2.EVENT_LBUTTONDOWN:
-        channel.send(f"mouse down {x} {y} 1")
-    elif event == cv2.EVENT_LBUTTONUP:
-        channel.send(f"mouse up {x} {y} 1")
-
-
 def on_message(message):
     global buf
     if isinstance(message, bytes):
@@ -56,15 +43,7 @@ def on_message(message):
             continue
         msg = json.loads(line)
         if msg["type"] == "frame":
-            frame = np.frombuffer(base64.b64decode(msg["data"]), dtype=np.uint8)
-            frame = frame.reshape((msg["height"], msg["width"], 3))
-            cv2.imshow("frame", frame)
-            k = cv2.waitKey(1)
-            if k == 27:
-                exit(0)
-            if k != -1 and channel:
-                channel.send(f"key down {k} 0")
-                channel.send(f"key up {k} 0")
+            print("Frame shape:", (msg["height"], msg["width"], 3))
         else:
             print(msg)
 
@@ -75,8 +54,6 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 8080)
     await site.start()
-    cv2.namedWindow('frame')
-    cv2.setMouseCallback('frame', on_mouse)
     while True:
         await asyncio.sleep(1)
 

@@ -196,7 +196,9 @@ void MediaPluginPyBridge::OnOfferAvailable(const std::string &sdp)
         return;
     curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:8080/offer");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    std::string post = "{\"sdp\":\"" + sdp + "\"}";
+    LLSD req;
+    req["sdp"] = sdp;
+    std::string post = boost::json::serialize(LlsdToJson(req));
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, post.size());
     std::string response;
