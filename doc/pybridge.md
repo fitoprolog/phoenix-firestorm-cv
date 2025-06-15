@@ -23,8 +23,9 @@ through the normal plugin framework.
    script starts an HTTP server on `localhost:8080` and waits for the viewer's
    offer.
 4. Frames are pushed from the viewer to Python via the WebRTC data channel.
-   Key and mouse events typed in the Python window are forwarded back to the
-   viewer.
+   The viewer captures the back buffer each frame using its regular snapshot
+   routine so the image matches what you see on screen. Key and mouse events
+   typed in the Python window are forwarded back to the viewer.
 
 Each JSON packet ends with a newline and is carried over the WebRTC data
 channel.

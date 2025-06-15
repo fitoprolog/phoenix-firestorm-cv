@@ -102,11 +102,10 @@ void FSPythonBridge::captureFrame()
     S32 width = gViewerWindow->getWindowWidthRaw();
     S32 height = gViewerWindow->getWindowHeightRaw();
     LLPointer<LLImageRaw> raw = new LLImageRaw(width, height, 3);
-    LLImageDataSharedLock lock(raw);
-    glPixelStorei(GL_PACK_ALIGNMENT,1);
-    glReadBuffer(GL_BACK);
-    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, raw->getData());
-    sendFrame(raw);
+    if (gViewerWindow->rawSnapshot(raw, width, height, true, false, true, true, false))
+    {
+        sendFrame(raw);
+    }
 }
 
 void FSPythonBridge::sendFrame(LLPointer<LLImageRaw> raw)
