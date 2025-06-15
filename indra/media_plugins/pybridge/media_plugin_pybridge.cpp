@@ -34,6 +34,7 @@
 #include "llbase64.h"
 #include "llsd.h"
 #include "llsdserialize.h"
+#include "llsdjson.h"
 
 #include "llwebrtc.h"
 #include <curl/curl.h>
@@ -207,11 +208,18 @@ void MediaPluginPyBridge::OnOfferAvailable(const std::string &sdp)
     });
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
-    LLSD data;
-    LLSDSerialize::fromJSON(data, response);
-    if (data.has("sdp"))
+    try
     {
-        mPeer->AnswerAvailable(data["sdp"].asString());
+        auto json_val = boost::json::parse(response);
+        LLSD data = LlsdFromJson(json_val);
+        if (data.has("sdp"))
+        {
+            mPeer->AnswerAvailable(data["sdp"].asString());
+        }
+    }
+    catch (const std::exception &)
+    {
+        // ignore parse errors
     }
 }
 
